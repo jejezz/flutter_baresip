@@ -25,3 +25,51 @@ index 772672f..580af73 100644
 +  )
 +  target_link_options(${PROJECT_NAME} PUBLIC -lstdc++)
 +endif()
+diff --git a/modules/webrtc_aec/aec.cpp b/modules/webrtc_aec/aec.cpp
+index c3caede..6c20439 100644
+--- a/modules/webrtc_aec/aec.cpp
++++ b/modules/webrtc_aec/aec.cpp
+@@ -6,7 +6,11 @@
+ 
+ #include <re.h>
+ #include <rem.h>
++/* baresip.h 의 struct log 가 MSVC <cmath> 의 전역 log 템플릿과 부딪친다.
++ * 이 파일은 struct log 를 쓰지 않으므로 이름만 비켜 둔다. */
++#define log baresip_log
+ #include <baresip.h>
++#undef log
+ #include "aec.h"
+ 
+ 
+diff --git a/modules/webrtc_aec/decode.cpp b/modules/webrtc_aec/decode.cpp
+index a02eecc..8d78fe4 100644
+--- a/modules/webrtc_aec/decode.cpp
++++ b/modules/webrtc_aec/decode.cpp
+@@ -6,7 +6,11 @@
+ 
+ #include <re.h>
+ #include <rem.h>
++/* baresip.h 의 struct log 가 MSVC <cmath> 의 전역 log 템플릿과 부딪친다.
++ * 이 파일은 struct log 를 쓰지 않으므로 이름만 비켜 둔다. */
++#define log baresip_log
+ #include <baresip.h>
++#undef log
+ #include "aec.h"
+ 
+ 
+diff --git a/modules/webrtc_aec/encode.cpp b/modules/webrtc_aec/encode.cpp
+index e4fa66c..296e5fc 100644
+--- a/modules/webrtc_aec/encode.cpp
++++ b/modules/webrtc_aec/encode.cpp
+@@ -7,7 +7,11 @@
+ #include <string.h>
+ #include <re.h>
+ #include <rem.h>
++/* baresip.h 의 struct log 가 MSVC <cmath> 의 전역 log 템플릿과 부딪친다.
++ * 이 파일은 struct log 를 쓰지 않으므로 이름만 비켜 둔다. */
++#define log baresip_log
+ #include <baresip.h>
++#undef log
+ #include "aec.h"
+ 
+ 
