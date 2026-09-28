@@ -37,10 +37,6 @@ MODULES="g711;opus;wasapi;auconv;auresamp;webrtc_aec;stun;turn;ice;srtp;dtls_srt
 # OpenSSL 의 Configure 는 MSYS perl 이 아니라 Strawberry Perl 이어야 한다.
 PERL="${PERL:-/c/Strawberry/perl/bin/perl.exe}"
 
-# Git Bash 의 /usr/bin 에 GNU link 가 있어 meson 이 MSVC link.exe 대신 그걸
-# 집는다. cl 이 있는 MSVC 도구 폴더를 PATH 맨 앞에 둔다.
-export PATH="$(dirname "$(command -v cl)"):$PATH"
-
 log() { printf '\n=== %s\n' "$*"; }
 win() { cygpath -m "$1"; }
 
@@ -106,6 +102,10 @@ if [ ! -f "$AEC/lib/libwebrtc-audio-processing-1.a" ] && \
   [ -d "$SRC/webrtc-ap" ] || git clone -q --depth 1 -b "$WEBRTC_AP_VERSION" \
     https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing.git "$SRC/webrtc-ap"
   (
+    # Git Bash 의 /usr/bin 에 GNU link 가 있어 meson 이 MSVC link.exe 대신
+    # 그걸 집는다. 이 단계에서만 cl 이 있는 폴더를 앞에 둔다(PATH 를 통째로
+    # 늘리면 nmake 가 "out of environment space" 로 멈춘다).
+    export PATH="$(dirname "$(command -v cl)"):$PATH"
     cd "$SRC/webrtc-ap"
     meson setup build --buildtype=release -Ddefault_library=static \
       --force-fallback-for=abseil-cpp -Db_vscrt=md \
