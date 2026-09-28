@@ -51,7 +51,8 @@ class BaresipSip {
     }
   }
 
-  final StreamController<Map<String, Object?>> _events = StreamController.broadcast();
+  final StreamController<Map<String, Object?>> _events =
+      StreamController.broadcast();
   NativeCallable<c.EventCallback>? _callback;
 
   /// `stack` · `registration` · `call` · `media`.
@@ -69,6 +70,20 @@ class BaresipSip {
       throw BaresipException('start', -err);
     }
     _callback = callback;
+  }
+
+  /// 로그를 이 파일에 덧붙인다(baresip·libre 로그와 [log] 로 넘긴 줄).
+  /// [start] 앞에 불러야 기동 로그까지 남는다.
+  static void setLogFile(String path) {
+    final err = using(
+      (arena) => c.bs_set_log_file(path.toNativeUtf8(allocator: arena)),
+    );
+    if (err != 0) throw BaresipException('setLogFile', -err);
+  }
+
+  /// 앱 쪽 한 줄을 로그 파일에 쓴다.
+  static void log(String message) {
+    using((arena) => c.bs_log(message.toNativeUtf8(allocator: arena)));
   }
 
   /// 영상 텍스처를 만들고 스택의 영상 출력을 거기로 잇는다.
@@ -148,7 +163,8 @@ class BaresipSip {
   /// 발신. 통화 번호를 돌려준다.
   int makeCall(String requestUri, {required bool video}) {
     final result = using(
-      (arena) => c.bs_call(requestUri.toNativeUtf8(allocator: arena), video ? 1 : 0),
+      (arena) =>
+          c.bs_call(requestUri.toNativeUtf8(allocator: arena), video ? 1 : 0),
     );
     _check('makeCall', result);
     return result;
@@ -157,7 +173,8 @@ class BaresipSip {
   void answer(int callId, {required bool video}) =>
       _check('answer', c.bs_answer(callId, video ? 1 : 0));
 
-  void decline(int callId, {int code = 603}) => _check('decline', c.bs_hangup(callId, code));
+  void decline(int callId, {int code = 603}) =>
+      _check('decline', c.bs_hangup(callId, code));
 
   void hangup(int callId) => _check('hangup', c.bs_hangup(callId, 0));
 
@@ -165,7 +182,8 @@ class BaresipSip {
   void setVideoEnabled(int callId, bool enabled) =>
       _check('setVideoEnabled', c.bs_set_video(callId, enabled ? 1 : 0));
 
-  void setMute(int callId, bool mute) => _check('setMute', c.bs_mute(callId, mute ? 1 : 0));
+  void setMute(int callId, bool mute) =>
+      _check('setMute', c.bs_mute(callId, mute ? 1 : 0));
 
   void sendDtmf(int callId, String digits) => _check(
     'sendDtmf',
@@ -185,7 +203,8 @@ class BaresipSip {
 
   void _onEvent(Pointer<Utf8> json) {
     try {
-      final event = (jsonDecode(json.toDartString()) as Map).cast<String, Object?>();
+      final event = (jsonDecode(json.toDartString()) as Map)
+          .cast<String, Object?>();
       if (!_events.isClosed) _events.add(event);
     } finally {
       c.bs_free(json.cast());

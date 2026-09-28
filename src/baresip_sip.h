@@ -46,6 +46,12 @@ char *bs_stats(int call_id);
 
 void bs_free(void *p);
 
+/* 로그를 이 파일(UTF-8 경로)에 덧붙인다. baresip·libre 로그와 bs_log 로 넘긴
+ * 줄이 시각과 함께 쌓인다. NULL 이나 빈 문자열이면 멈춘다. bs_start 앞에
+ * 불러야 기동 로그까지 남는다. */
+int  bs_set_log_file(const char *path);
+void bs_log(const char *msg);
+
 #ifdef __cplusplus
 }
 #endif

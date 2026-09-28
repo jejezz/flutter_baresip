@@ -39,7 +39,12 @@ const _minMacOS = '12.0';
 CBuilder _macOS(BuildInput input) => CBuilder.library(
   name: 'baresip_sip',
   assetName: 'src/bindings.dart',
-  sources: ['src/baresip_sip.c', 'src/vt_h264.c', 'src/video_out.c'],
+  sources: [
+    'src/baresip_sip.c',
+    'src/vt_h264.c',
+    'src/video_out.c',
+    'src/log_file.c',
+  ],
   includes: ['native/macos/include', 'native/macos/include/re'],
   // 상대 경로는 훅의 출력 폴더 기준이 되므로 패키지 경로로 푼다.
   libraryDirectories: [
@@ -107,7 +112,7 @@ CBuilder? _windows(BuildInput input) {
     name: 'baresip_sip',
     assetName: 'src/bindings.dart',
     // 영상(H.264)은 아직 없다. video_out.c 는 싱크가 없으면 아무 일도 하지 않는다.
-    sources: ['src/baresip_sip.c', 'src/video_out.c'],
+    sources: ['src/baresip_sip.c', 'src/video_out.c', 'src/log_file.c'],
     includes: ['native/windows/include', 'native/windows/include/re'],
     libraryDirectories: [dir.resolve('lib/').toFilePath()],
     libraries: [

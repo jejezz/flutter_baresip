@@ -22,6 +22,7 @@
 #include <baresip.h>
 
 #include "baresip_sip.h"
+#include "log_file.h"
 #include "video_out.h"
 #ifdef __APPLE__
 #include "vt_h264.h"
@@ -427,6 +428,8 @@ static int stack_thread(void *arg)
 	if (err)
 		goto fail;
 
+	log_file_attach();
+
 	err = mqueue_alloc(&g.mq, mq_handler, NULL);
 	if (err)
 		goto out;
@@ -487,6 +490,7 @@ static int stack_thread(void *arg)
 	baresip_close();
 	mod_close();
 	re_thread_async_close();
+	log_file_detach();
 	g.mq = mem_deref(g.mq);
 	mem_deref(conf);
 	libre_close();

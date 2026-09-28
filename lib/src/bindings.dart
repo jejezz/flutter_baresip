@@ -13,7 +13,14 @@ external int bs_start(int sipPort, Pointer<NativeFunction<EventCallback>> cb);
 external void bs_stop();
 
 @Native<
-  Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Uint16, Pointer<Utf8>)
+  Int32 Function(
+    Pointer<Utf8>,
+    Pointer<Utf8>,
+    Pointer<Utf8>,
+    Pointer<Utf8>,
+    Uint16,
+    Pointer<Utf8>,
+  )
 >()
 external int bs_register(
   Pointer<Utf8> user,
@@ -50,6 +57,12 @@ external void bs_free(Pointer<Void> p);
 
 @Native<Int32 Function(Int32, Int32)>()
 external int bs_set_video(int callId, int enabled);
+
+@Native<Int32 Function(Pointer<Utf8>)>()
+external int bs_set_log_file(Pointer<Utf8> path);
+
+@Native<Void Function(Pointer<Utf8>)>()
+external void bs_log(Pointer<Utf8> msg);
 
 @Native<Void Function(Pointer<Void>, Pointer<Void>)>()
 external void bs_set_video_sink(Pointer<Void> sink, Pointer<Void> ctx);
