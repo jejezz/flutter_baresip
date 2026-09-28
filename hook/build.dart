@@ -151,7 +151,9 @@ CBuilder _windows(Uri native) {
       'ksuser',
     ],
     // 정적 라이브러리를 모두 동적 CRT 로 빌드했다. cl 은 따로 말하지 않으면 /MT 다.
-    flags: ['/MD'],
+    // src/ 는 BOM 없는 UTF-8(한국어 주석)이라 /utf-8 이 없으면 한국어 Windows 의
+    // cl 이 CP949 로 읽고 C4819 를 쏟아낸다.
+    flags: ['/MD', '/utf-8'],
     std: 'c11',
     defines: defines,
   );

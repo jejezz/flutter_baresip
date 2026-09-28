@@ -16,6 +16,11 @@
 # 모두 MSVC 동적 CRT(/MD)로 맞춘다 — Flutter Windows 앱과 같아야 한다.
 # baresip 의 C++ 는 webrtc_aec 뿐인데, 지정 초기화(C++20)를 쓴다. Clang 은
 # 기본으로 받지만 MSVC 는 C++20 을 말해 줘야 한다.
+#
+# C++ 는 STL 의 벡터화 알고리즘을 끄고 빌드한다(NOVEC). 켜 두면 새 MSVC 의
+# <algorithm>·<string> 이 그 버전의 msvcprt.lib 에만 있는 도우미
+# (__std_min_element_f_ 등)를 부르고, 그보다 오래된 Visual Studio 로 앱을
+# 빌드하면 LNK2019 로 멈춘다. CI(windows-latest)는 늘 최신이라 생기는 일이다.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -42,6 +47,8 @@ PERL="${PERL:-/c/Strawberry/perl/bin/perl.exe}"
 
 log() { printf '\n=== %s\n' "$*"; }
 win() { cygpath -m "$1"; }
+
+NOVEC=-D_USE_STD_VECTOR_ALGORITHMS=0
 
 COMMON=(
   -G Ninja
@@ -110,7 +117,7 @@ if [ ! -f "$AEC/lib/libwebrtc-audio-processing-1.a" ] && \
     export PATH="$(dirname "$(command -v cl)"):$PATH"
     cd "$SRC/webrtc-ap"
     meson setup build --buildtype=release -Ddefault_library=static \
-      --force-fallback-for=abseil-cpp -Db_vscrt=md \
+      --force-fallback-for=abseil-cpp -Db_vscrt=md -Dcpp_args="$NOVEC" \
       --prefix="$(win "$AEC")"
     meson install -C build
   )
@@ -136,7 +143,7 @@ cmake -S "$SRC/baresip" -B "$SRC/baresip/build" "${COMMON[@]}" \
   -DRE_LIBRARY="$(win "$SRC/re/build/re-static.lib")" \
   -DWEBRTC_AEC_INCLUDE_DIRS="$(win "$AEC/include/webrtc-audio-processing-1")" \
   -DWEBRTC_AEC_LIBRARY_DIRS="$(win "$AEC/lib")" \
-  -DCMAKE_CXX_FLAGS="-DWEBRTC_WIN -DNOMINMAX -I$(win "$AEC/include")" \
+  -DCMAKE_CXX_FLAGS="-DWEBRTC_WIN -DNOMINMAX $NOVEC -I$(win "$AEC/include")" \
   -DCMAKE_CXX_STANDARD=20 \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build "$SRC/baresip/build" --target baresip
