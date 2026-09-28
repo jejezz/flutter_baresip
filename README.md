@@ -15,7 +15,7 @@ dependencies:
   flutter_baresip:
     git:
       url: https://github.com/jejezz/flutter_baresip
-      ref: v0.1.0
+      ref: v0.1.1
 ```
 
 ```dart
@@ -48,7 +48,7 @@ baresip 원본에 얹는 고침은 `native/patches/` 에 있다.
 만들고, 릴리스의 `SHA256SUMS` 로 `native/prebuilt.json` 을 고친다.
 
 ```bash
-git tag libs-4.11.0-1 && git push origin libs-4.11.0-1
+git tag libs-4.11.0-2 && git push origin libs-4.11.0-2
 ```
 
 ## 라이선스
