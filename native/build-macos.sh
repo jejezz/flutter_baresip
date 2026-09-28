@@ -147,6 +147,8 @@ cp "$SRC/baresip/include/baresip.h" "$OUT/include/"
 cp "$SRC/re/LICENSE" "$OUT/LICENSE.libre"
 cp "$SRC/baresip/LICENSE" "$OUT/LICENSE.baresip"
 cp "$SRC/webrtc-ap/COPYING" "$OUT/LICENSE.webrtc-audio-processing"
+# webrtc-audio-processing 안에 abseil 이 정적으로 들어간다.
+cp "$SRC"/webrtc-ap/subprojects/abseil-cpp-*/LICENSE "$OUT/LICENSE.abseil"
 cp "$SRC/openssl-$OPENSSL_VERSION/LICENSE.txt" "$OUT/LICENSE.openssl"
 cp "$SRC/opus/COPYING" "$OUT/LICENSE.opus"
 
