@@ -1,0 +1,27 @@
+diff --git a/modules/webrtc_aec/CMakeLists.txt b/modules/webrtc_aec/CMakeLists.txt
+index 772672f..580af73 100644
+--- a/modules/webrtc_aec/CMakeLists.txt
++++ b/modules/webrtc_aec/CMakeLists.txt
+@@ -20,11 +20,14 @@ endif()
+ target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
+     ${WEBRTC_AEC_INCLUDE_DIRS})
+ target_link_libraries(${PROJECT_NAME} PRIVATE ${WEBRTC_AEC_LIBRARIES})
+-target_compile_options(${PROJECT_NAME} PRIVATE
+-  -fPIC
+-  -Wno-shadow
+-  -Wno-pedantic
+-  -Wno-missing-field-initializers
+-  -Wno-unused-parameter
+-)
+-target_link_options(${PROJECT_NAME} PUBLIC -lstdc++)
++# GCC·Clang 옵션이다. MSVC 는 알아듣지 못하고 멈춘다.
++if(NOT MSVC)
++  target_compile_options(${PROJECT_NAME} PRIVATE
++    -fPIC
++    -Wno-shadow
++    -Wno-pedantic
++    -Wno-missing-field-initializers
++    -Wno-unused-parameter
++  )
++  target_link_options(${PROJECT_NAME} PUBLIC -lstdc++)
++endif()
