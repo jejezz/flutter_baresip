@@ -131,6 +131,7 @@ CBuilder? _windows(BuildInput input) {
       'oleaut32',
       'advapi32',
       'user32',
+      'shell32', // libre fs_gethome → SHGetFolderPathA
       'bcrypt',
       'avrt',
       'ksuser',
