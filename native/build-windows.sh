@@ -12,6 +12,7 @@
 #       windows/defines.txt   (C 경계를 libre 와 같은 매크로로 빌드하려고)
 #
 # 필요한 것: cmake, ninja, python(meson), Strawberry Perl(OpenSSL Configure).
+# cl 옵션은 /D 대신 -D 로 쓴다 — Git Bash 가 /로 시작하는 인자를 경로로 바꾼다.
 # 모두 MSVC 동적 CRT(/MD)로 맞춘다 — Flutter Windows 앱과 같아야 한다.
 set -euo pipefail
 
@@ -133,7 +134,7 @@ cmake -S "$SRC/baresip" -B "$SRC/baresip/build" "${COMMON[@]}" \
   -DRE_LIBRARY="$(win "$SRC/re/build/re-static.lib")" \
   -DWEBRTC_AEC_INCLUDE_DIRS="$(win "$AEC/include/webrtc-audio-processing-1")" \
   -DWEBRTC_AEC_LIBRARY_DIRS="$(win "$AEC/lib")" \
-  -DCMAKE_CXX_FLAGS="/DWEBRTC_WIN /DNOMINMAX /I$(win "$AEC/include")" \
+  -DCMAKE_CXX_FLAGS="-DWEBRTC_WIN -DNOMINMAX -I$(win "$AEC/include")" \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build "$SRC/baresip/build" --target baresip
 
