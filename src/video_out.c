@@ -9,7 +9,6 @@
  * 로 걸어 둔다. 싱크는 baresip 의 영상 스레드에서 불리므로 스스로 스레드
  * 안전해야 한다.
  */
-#include <pthread.h>
 #include <string.h>
 #include <re.h>
 #include <rem.h>
@@ -19,14 +18,19 @@
 #include "video_out.h"
 
 static struct {
-	pthread_mutex_t lock;
+	mtx_t lock;
 	bs_video_sink sink;
 	void *ctx;
 	video_out_size_h *sizeh;
 	struct vidsz last[2];
-} vo = {
-	.lock = PTHREAD_MUTEX_INITIALIZER,
-};
+} vo;
+
+static once_flag vo_once = ONCE_FLAG_INIT;
+
+static void vo_init(void)
+{
+	mtx_init(&vo.lock, mtx_plain);
+}
 
 static struct vidisp *vidisp;
 
@@ -46,12 +50,12 @@ static void deliver(struct conv *cv, int which, const struct vidframe *f)
 	if (!f || !vidframe_isvalid(f))
 		return;
 
-	pthread_mutex_lock(&vo.lock);
+	mtx_lock(&vo.lock);
 	sink = vo.sink;
 	ctx = vo.ctx;
 	resized = !vidsz_cmp(&vo.last[which], &f->size);
 	vo.last[which] = f->size;
-	pthread_mutex_unlock(&vo.lock);
+	mtx_unlock(&vo.lock);
 
 	if (resized) {
 		info("video_out: %s %ux%u (%s)\n", which ? "remote" : "local",
@@ -184,6 +188,7 @@ static struct vidfilt selfview = {
 
 int video_out_register(video_out_size_h *sizeh)
 {
+	call_once(&vo_once, vo_init);
 	vo.sizeh = sizeh;
 	memset(vo.last, 0, sizeof(vo.last));
 	vidfilt_register(baresip_vidfiltl(), &selfview);
@@ -201,15 +206,16 @@ void video_out_unregister(void)
 /* 통화가 끝나면 다음 통화에서 크기를 다시 알리도록 잊는다. */
 void video_out_reset(void)
 {
-	pthread_mutex_lock(&vo.lock);
+	mtx_lock(&vo.lock);
 	memset(vo.last, 0, sizeof(vo.last));
-	pthread_mutex_unlock(&vo.lock);
+	mtx_unlock(&vo.lock);
 }
 
 void bs_set_video_sink(bs_video_sink sink, void *ctx)
 {
-	pthread_mutex_lock(&vo.lock);
+	call_once(&vo_once, vo_init);
+	mtx_lock(&vo.lock);
 	vo.sink = sink;
 	vo.ctx = ctx;
-	pthread_mutex_unlock(&vo.lock);
+	mtx_unlock(&vo.lock);
 }

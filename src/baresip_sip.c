@@ -14,9 +14,7 @@
  * 같게 맞췄다. Dart 쪽이 같은 변환을 쓴다.
  */
 #include <errno.h>
-#include <pthread.h>
 #include <stdarg.h>
-#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,7 +23,9 @@
 
 #include "baresip_sip.h"
 #include "video_out.h"
+#ifdef __APPLE__
 #include "vt_h264.h"
+#endif
 
 #define MAX_CALLS 8
 #define REG_INTERVAL 300
@@ -36,12 +36,13 @@ struct slot {
 };
 
 static struct {
-	pthread_t thread;
-	pthread_mutex_t lock;
-	pthread_cond_t cond;
+	/* libre 의 C11 스레드(thrd·mtx·cnd)를 쓴다 — Windows 에서도 돈다. */
+	thrd_t thread;
+	mtx_t lock;
+	cnd_t cond;
 	int start_err;        /* 스레드가 기동을 마치면 채운다 */
 	bool start_done;
-	atomic_bool running;  /* re_main 이 돌고 있는지 */
+	RE_ATOMIC bool running;  /* re_main 이 돌고 있는지 */
 
 	uint16_t sip_port;
 	bs_event_cb cb;
@@ -52,14 +53,20 @@ static struct {
 	int next_call_id;
 
 	/* 영상 크기 알림이 어느 통화의 것인지. 영상 스레드에서 읽는다. */
-	atomic_int media_call_id;
-	atomic_uint video_w[2];
-	atomic_uint video_h[2];
+	RE_ATOMIC int media_call_id;
+	RE_ATOMIC unsigned video_w[2];
+	RE_ATOMIC unsigned video_h[2];
 } g = {
-	.lock = PTHREAD_MUTEX_INITIALIZER,
-	.cond = PTHREAD_COND_INITIALIZER,
 	.next_call_id = 1,
 };
+
+static once_flag g_once = ONCE_FLAG_INIT;
+
+static void g_init(void)
+{
+	mtx_init(&g.lock, mtx_plain);
+	cnd_init(&g.cond);
+}
 
 
 /* ───────────────────────────────────────────────────── 사건 보내기 */
@@ -202,8 +209,8 @@ static bool video_active(const struct call *call)
 /* 미디어 상태. 영상 크기는 아는 쪽만 싣는다(0 이면 아직 그림이 없다). */
 static void emit_media(int id, bool video)
 {
-	unsigned lw = atomic_load(&g.video_w[0]), lh = atomic_load(&g.video_h[0]);
-	unsigned rw = atomic_load(&g.video_w[1]), rh = atomic_load(&g.video_h[1]);
+	unsigned lw = re_atomic_rlx(&g.video_w[0]), lh = re_atomic_rlx(&g.video_h[0]);
+	unsigned rw = re_atomic_rlx(&g.video_w[1]), rh = re_atomic_rlx(&g.video_h[1]);
 
 	emit("\"type\":\"media\",\"callId\":%d,"
 	     "\"audioActive\":true,\"videoActive\":%s,"
@@ -215,10 +222,10 @@ static void emit_media(int id, bool video)
 /* video_out 이 영상 스레드에서 부른다. */
 static void on_video_size(int which, unsigned w, unsigned h)
 {
-	int id = atomic_load(&g.media_call_id);
+	int id = re_atomic_rlx(&g.media_call_id);
 
-	atomic_store(&g.video_w[which], w);
-	atomic_store(&g.video_h[which], h);
+	re_atomic_rlx_set(&g.video_w[which], w);
+	re_atomic_rlx_set(&g.video_h[which], h);
 	if (id > 0)
 		emit_media(id, true);
 }
@@ -226,8 +233,8 @@ static void on_video_size(int which, unsigned w, unsigned h)
 static void reset_video_state(void)
 {
 	for (int i = 0; i < 2; i++) {
-		atomic_store(&g.video_w[i], 0);
-		atomic_store(&g.video_h[i], 0);
+		re_atomic_rlx_set(&g.video_w[i], 0);
+		re_atomic_rlx_set(&g.video_h[i], 0);
 	}
 	video_out_reset();
 }
@@ -292,7 +299,7 @@ static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 	case BEVENT_CALL_ESTABLISHED:
 		id = slot_add(call);
 		reset_video_state();
-		atomic_store(&g.media_call_id, id);
+		re_atomic_rlx_set(&g.media_call_id, id);
 		emit_call(call, id, "confirmed", 0, NULL);
 		emit_media(id, video_active(call));
 		break;
@@ -314,8 +321,8 @@ static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 			code = call_scode(call);
 		emit_call(call, id, "disconnected", code, reason);
 		slot_remove(call);
-		if (atomic_load(&g.media_call_id) == id)
-			atomic_store(&g.media_call_id, 0);
+		if (re_atomic_rlx(&g.media_call_id) == id)
+			re_atomic_rlx_set(&g.media_call_id, 0);
 		break;
 
 	default:
@@ -326,6 +333,26 @@ static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 
 /* ───────────────────────────────────────────────────── 스택 스레드 */
 
+/* 플랫폼마다 다른 설정.
+ *   macOS   — 오디오 audiounit, 영상 avcapture + vt_h264(VideoToolbox) + flutter 출력
+ *   Windows — 오디오 wasapi. 영상은 아직 없다(H.264 를 무엇으로 할지 정하기 전). */
+#ifdef __APPLE__
+#define AUDIO_DRIVER "audiounit"
+#define VIDEO_CONFIG \
+	"video_source\t\tavcapture,\n" \
+	"video_display\t\tflutter,\n" \
+	"video_size\t\t640x480\n" \
+	"video_bitrate\t\t1000000\n" \
+	"video_fps\t\t25\n"
+#define VIDEO_MODULES "module\t\t\tavcapture.so\n"
+#define VIDEO_CODECS ";video_codecs=H264"
+#else
+#define AUDIO_DRIVER "wasapi"
+#define VIDEO_CONFIG ""
+#define VIDEO_MODULES ""
+#define VIDEO_CODECS ""
+#endif
+
 static const char *config_template =
 	"sip_listen\t\t0.0.0.0:%u\n"
 	"sip_verify_server\tno\n"
@@ -333,30 +360,24 @@ static const char *config_template =
 	/* 기본값(no)이면 들어온 INVITE 를 앱이 ua_accept 해 주길 기다린다
 	 * (baresip 의 menu 모듈이 하는 일). 받아서 CALL_INCOMING 으로 올린다. */
 	"call_accept\t\tyes\n"
-	"audio_player\t\taudiounit,default\n"
-	"audio_source\t\taudiounit,default\n"
-	"audio_alert\t\taudiounit,default\n"
+	"audio_player\t\t" AUDIO_DRIVER ",default\n"
+	"audio_source\t\t" AUDIO_DRIVER ",default\n"
+	"audio_alert\t\t" AUDIO_DRIVER ",default\n"
 	"rtp_ports\t\t10000-20000\n"
-	/* 영상: 카메라는 avcapture, 출력은 video_out.c 의 "flutter".
-	 * H.264 는 vt_h264.c(VideoToolbox)가 맡는다. */
-	"video_source\t\tavcapture,\n"
-	"video_display\t\tflutter,\n"
-	"video_size\t\t640x480\n"
-	"video_bitrate\t\t1000000\n"
-	"video_fps\t\t25\n"
+	VIDEO_CONFIG
 	/* 음성에는 스테레오가 필요 없고, webrtc_aec 는 모노만 처리한다. */
 	"opus_stereo\t\tno\n"
 	"opus_sprop_stereo\tno\n"
 	"module_path\t\t.\n"
 	"module\t\t\tg711.so\n"
 	"module\t\t\topus.so\n"
-	"module\t\t\taudiounit.so\n"
+	"module\t\t\t" AUDIO_DRIVER ".so\n"
 	"module\t\t\tauconv.so\n"
 	"module\t\t\tauresamp.so\n"
 	/* 에코 제거(WebRTC AEC3). 필터는 불러온 순서대로 서므로 auconv·
 	 * auresamp 뒤에 둬야 코덱 표본율에서 돈다. 모노만 받는다. */
 	"module\t\t\twebrtc_aec.so\n"
-	"module\t\t\tavcapture.so\n"
+	VIDEO_MODULES
 	"module\t\t\tstun.so\n"
 	"module\t\t\tturn.so\n"
 	"module\t\t\tice.so\n"
@@ -365,11 +386,11 @@ static const char *config_template =
 
 static void finish_start(int err)
 {
-	pthread_mutex_lock(&g.lock);
+	mtx_lock(&g.lock);
 	g.start_err = err;
 	g.start_done = true;
-	pthread_cond_signal(&g.cond);
-	pthread_mutex_unlock(&g.lock);
+	cnd_signal(&g.cond);
+	mtx_unlock(&g.lock);
 }
 
 /* re_main 이 돌기 시작한 뒤에 한 번 불린다. 이때부터 re_thread_enter 가
@@ -377,7 +398,7 @@ static void finish_start(int err)
 static void on_loop_started(void *arg)
 {
 	(void)arg;
-	atomic_store(&g.running, true);
+	re_atomic_rlx_set(&g.running, true);
 	emit("\"type\":\"stack\",\"state\":\"started\"");
 	finish_start(0);
 }
@@ -393,7 +414,7 @@ static void mq_handler(int id, void *data, void *arg)
 	re_cancel();
 }
 
-static void *stack_thread(void *arg)
+static int stack_thread(void *arg)
 {
 	struct tmr tmr;
 	char *conf = NULL;
@@ -424,7 +445,9 @@ static void *stack_thread(void *arg)
 	if (err)
 		goto out;
 
+#ifdef __APPLE__
 	vt_h264_register();
+#endif
 	err = video_out_register(on_video_size);
 	if (err)
 		goto out;
@@ -446,7 +469,7 @@ static void *stack_thread(void *arg)
 
 	(void)re_main(NULL);
 
-	atomic_store(&g.running, false);
+	re_atomic_rlx_set(&g.running, false);
 	emit("\"type\":\"stack\",\"state\":\"stopped\"");
 
  out:
@@ -456,7 +479,9 @@ static void *stack_thread(void *arg)
 	memset(g.slots, 0, sizeof(g.slots));
 	ua_close();
 	video_out_unregister();
+#ifdef __APPLE__
 	vt_h264_unregister();
+#endif
 	module_app_unload();
 	conf_close();
 	baresip_close();
@@ -473,7 +498,7 @@ static void *stack_thread(void *arg)
 		finish_start(err);
 	}
 
-	return NULL;
+	return 0;
 }
 
 
@@ -483,48 +508,51 @@ int bs_start(uint16_t sip_port, bs_event_cb cb)
 {
 	int err;
 
-	if (atomic_load(&g.running))
+	if (re_atomic_rlx(&g.running))
 		return 0;
 
+	call_once(&g_once, g_init);
+
+#ifndef _WIN32
 	/* baresip 은 로그를 stdout 으로 낸다. 파일·파이프로 받을 때도 줄마다
-	 * 나오게 한다. */
+	 * 나오게 한다. (MSVC 는 _IOLBF 를 받지 않는다.) */
 	setvbuf(stdout, NULL, _IOLBF, 0);
+#endif
 
 	g.sip_port = sip_port;
 	g.cb = cb;
 	g.start_done = false;
 	g.start_err = 0;
 
-	err = pthread_create(&g.thread, NULL, stack_thread, NULL);
-	if (err)
-		return -err;
+	if (thrd_create(&g.thread, stack_thread, NULL) != thrd_success)
+		return -EAGAIN;
 
-	pthread_mutex_lock(&g.lock);
+	mtx_lock(&g.lock);
 	while (!g.start_done)
-		pthread_cond_wait(&g.cond, &g.lock);
+		cnd_wait(&g.cond, &g.lock);
 	err = g.start_err;
-	pthread_mutex_unlock(&g.lock);
+	mtx_unlock(&g.lock);
 
 	if (err)
-		pthread_join(g.thread, NULL);
+		thrd_join(g.thread, NULL);
 
 	return -err;
 }
 
 void bs_stop(void)
 {
-	if (!atomic_load(&g.running))
+	if (!re_atomic_rlx(&g.running))
 		return;
 
 	mqueue_push(g.mq, 0, NULL);
-	pthread_join(g.thread, NULL);
+	thrd_join(g.thread, NULL);
 	g.cb = NULL;
 }
 
 /* Dart 에서 온 호출을 re 스레드 잠금 안에서 돌린다. */
 #define ENTER()                              \
 	do {                                 \
-		if (!atomic_load(&g.running)) \
+		if (!re_atomic_rlx(&g.running)) \
 			return -EAGAIN;      \
 		re_thread_enter();           \
 	} while (0)
@@ -554,7 +582,7 @@ int bs_register(const char *user, const char *password, const char *domain,
 			  ";outbound=\"sip:%s:%u;transport=%s\""
 			  ";regint=%u;auth_user=%s"
 			  ";audio_codecs=PCMU/8000/1,PCMA/8000/1,opus/48000/1"
-			  ";video_codecs=H264",
+			  VIDEO_CODECS,
 			  user, domain, transport,
 			  server, port, transport,
 			  REG_INTERVAL, user);
@@ -639,8 +667,8 @@ int bs_hangup(int call_id, int code)
 		 * 기다리므로 여기서 직접 알린다. */
 		emit_call(call, call_id, "disconnected", code ? code : 200, "");
 		slot_remove(call);
-		if (atomic_load(&g.media_call_id) == call_id)
-			atomic_store(&g.media_call_id, 0);
+		if (re_atomic_rlx(&g.media_call_id) == call_id)
+			re_atomic_rlx_set(&g.media_call_id, 0);
 		ua_hangup(g.ua, call, (uint16_t)code, NULL);
 		err = 0;
 	}
@@ -707,7 +735,7 @@ char *bs_stats(int call_id)
 	char *body = NULL, *out = NULL;
 	double loss = 0;
 
-	if (!atomic_load(&g.running))
+	if (!re_atomic_rlx(&g.running))
 		return NULL;
 
 	re_thread_enter();
