@@ -1,9 +1,11 @@
 .dart_tool/
 pubspec.lock
-# build-macos.sh 가 받아 오는 소스와 빌드 찌꺼기. 결과물(native/macos)은 넣는다.
+# build-macos.sh 가 받아 오는 소스와 빌드 찌꺼기.
 native/third_party/
 build/
 # build-windows.sh 가 받아 오는 소스와 빌드 찌꺼기.
 native/third_party-windows/
-# build-windows.sh 결과(약 95MB). 저장소에 넣지 않고 CI 가 만든다.
+# 빌드 스크립트의 결과. 저장소에 넣지 않고 GitHub Release 에 올린다
+# (native/prebuilt.json). 여기에 있으면 훅이 받지 않고 이걸 쓴다.
+native/macos/
 native/windows/

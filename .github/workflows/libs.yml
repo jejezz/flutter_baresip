@@ -1,0 +1,113 @@
+# baresip 정적 라이브러리를 macOS·Windows 용으로 빌드해 GitHub Release 에 올린다.
+#
+# 라이브러리는 저장소에 넣지 않는다(macOS 약 18MB, Windows 약 95MB). 빌드 훅
+# (hook/build.dart)이 native/prebuilt.json 에 적힌 릴리스에서 받아 쓴다.
+#
+# 올리는 법: baresip·의존 라이브러리 버전이나 native/ 의 스크립트·패치를 바꾼 뒤
+#   git tag libs-4.11.0-2 && git push origin libs-4.11.0-2
+# 끝나면 릴리스의 SHA256SUMS 로 native/prebuilt.json 의 tag·sha256 을 고친다.
+#
+# 브랜치에 올리면(push·PR) 빌드만 확인하고 릴리스는 만들지 않는다.
+name: libs
+
+on:
+  workflow_dispatch:
+  push:
+    # tags 만 적으면 브랜치 push 로는 돌지 않으므로 둘 다 적는다.
+    # 태그를 올릴 때는 paths 를 따지지 않는다.
+    branches:
+      - '**'
+    tags:
+      - libs-*
+    paths:
+      - native/**
+      - .github/actions/**
+      - .github/workflows/libs.yml
+  pull_request:
+    paths:
+      - native/**
+      - .github/actions/**
+      - .github/workflows/libs.yml
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      # 의존 라이브러리(OpenSSL·Opus·webrtc-audio-processing)는 버전이 같으면
+      # 다시 쓴다. build-macos.sh 는 prefix 폴더가 있으면 건너뛴다.
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            native/third_party/openssl-prefix
+            native/third_party/opus-prefix
+            native/third_party/aec-prefix
+          key: baresip-macos-deps-openssl3.5.8-opus1.6.1-wap1.3
+          restore-keys: baresip-macos-deps-openssl3.5.8-opus1.6.1-wap1.3-
+
+      - name: Build
+        working-directory: native
+        run: ./build-macos.sh
+
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            native/third_party/openssl-prefix
+            native/third_party/opus-prefix
+            native/third_party/aec-prefix
+          key: baresip-macos-deps-openssl3.5.8-opus1.6.1-wap1.3-${{ github.run_id }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baresip-macos-arm64
+          path: native/macos
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/baresip-windows
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baresip-windows-x64
+          path: native/windows
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/libs-')
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Zip
+        run: |
+          mkdir dist
+          for name in baresip-macos-arm64 baresip-windows-x64; do
+            (cd "artifacts/$name" && zip -qr "../../dist/$name.zip" .)
+          done
+          (cd dist && sha256sum *.zip > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Release
+        run: |
+          # 앱 릴리스가 아니라 빌드 재료라 프리릴리스로 둔다.
+          gh release create "$TAG" dist/* \
+            --prerelease \
+            --title "baresip libraries $TAG" \
+            --notes "native/prebuilt.json 의 tag 를 $TAG 로, sha256 을 SHA256SUMS 로 고친다."

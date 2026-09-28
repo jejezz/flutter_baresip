@@ -1,0 +1,14 @@
+{
+  "repository": "jejezz/flutter_baresip",
+  "tag": "libs-4.11.0-1",
+  "assets": {
+    "macos": {
+      "name": "baresip-macos-arm64.zip",
+      "sha256": "0857b278c8b213cd88490aefd0a9e528e9ede8936dfb3b0983ff22ddac1d2354"
+    },
+    "windows": {
+      "name": "baresip-windows-x64.zip",
+      "sha256": "144d998cae77b92b89d7fdf584a57068017d5cafe6cf9b0a2f72d9a6e20dcf0a"
+    }
+  }
+}
