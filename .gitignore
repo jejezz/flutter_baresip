@@ -5,3 +5,5 @@ native/third_party/
 build/
 # build-windows.sh 가 받아 오는 소스와 빌드 찌꺼기.
 native/third_party-windows/
+# build-windows.sh 결과(약 95MB). 저장소에 넣지 않고 CI 가 만든다.
+native/windows/
