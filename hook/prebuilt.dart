@@ -13,8 +13,6 @@ import 'package:logging/logging.dart';
 ///    SHA-256 을 확인하고 훅의 공유 폴더에 풀어 둔다. 한 번 받으면 다시 받지
 ///    않는다.
 ///
-/// 저장소가 비공개라 받을 때 토큰이 필요하다. FLUTTER_BARESIP_TOKEN,
-/// GITHUB_TOKEN 을 차례로 보고 없으면 `gh auth token` 을 쓴다.
 Future<Uri> resolveNativeDir(
   BuildInput input,
   String platform,
@@ -75,39 +73,18 @@ Future<Uri> resolveNativeDir(
   return dest;
 }
 
+/// 공개 저장소의 릴리스 파일은 인증 없이, API 호출 한도 없이 받는다.
 Future<List<int>> _download(String repository, String tag, String name) async {
-  final token = await _token();
+  final uri = Uri.parse(
+    'https://github.com/$repository/releases/download/$tag/$name',
+  );
   final client = HttpClient();
   try {
-    // 릴리스에서 자산 번호를 찾는다.
-    final release = await _getJson(
-      client,
-      Uri.parse('https://api.github.com/repos/$repository/releases/tags/$tag'),
-      token,
-    );
-    final assets = (release['assets'] as List).cast<Map>();
-    final asset = assets.firstWhere(
-      (a) => a['name'] == name,
-      orElse: () => throw StateError(
-        'flutter_baresip: 릴리스 $tag 에 $name 이 없다',
-      ),
-    );
-
-    // 자산 API 는 서명된 저장소 주소로 넘겨 준다. 그쪽에 Authorization 을
-    // 같이 보내면 거절하므로 넘겨 주는 걸 직접 따라간다.
-    final request = await client.getUrl(Uri.parse(asset['url'] as String));
-    request.followRedirects = false;
-    request.headers.set('Accept', 'application/octet-stream');
-    if (token != null) request.headers.set('Authorization', 'Bearer $token');
-    var response = await request.close();
-    if (response.isRedirect) {
-      final location = response.headers.value('location')!;
-      await response.drain<void>();
-      response = await (await client.getUrl(Uri.parse(location))).close();
-    }
+    // 저장소 서버로 넘겨 주는 것은 HttpClient 가 따라간다.
+    final response = await (await client.getUrl(uri)).close();
     if (response.statusCode != 200) {
       throw StateError(
-        'flutter_baresip: $name 을 받지 못했다 (HTTP ${response.statusCode})',
+        'flutter_baresip: $uri 을 받지 못했다 (HTTP ${response.statusCode})',
       );
     }
     final builder = BytesBuilder(copy: false);
@@ -116,34 +93,4 @@ Future<List<int>> _download(String repository, String tag, String name) async {
   } finally {
     client.close();
   }
-}
-
-Future<Map> _getJson(HttpClient client, Uri uri, String? token) async {
-  final request = await client.getUrl(uri);
-  request.headers.set('Accept', 'application/vnd.github+json');
-  if (token != null) request.headers.set('Authorization', 'Bearer $token');
-  final response = await request.close();
-  final body = await response.transform(utf8.decoder).join();
-  if (response.statusCode != 200) {
-    throw StateError(
-      'flutter_baresip: $uri → HTTP ${response.statusCode}. 비공개 저장소라면 '
-      'FLUTTER_BARESIP_TOKEN 을 두거나 `gh auth login` 을 한다.',
-    );
-  }
-  return jsonDecode(body) as Map;
-}
-
-Future<String?> _token() async {
-  for (final name in ['FLUTTER_BARESIP_TOKEN', 'GITHUB_TOKEN']) {
-    final value = Platform.environment[name];
-    if (value != null && value.isNotEmpty) return value;
-  }
-  try {
-    final result = await Process.run('gh', ['auth', 'token']);
-    final value = (result.stdout as String).trim();
-    if (result.exitCode == 0 && value.isNotEmpty) return value;
-  } on ProcessException {
-    // gh 가 없다.
-  }
-  return null;
 }
