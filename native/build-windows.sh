@@ -103,8 +103,7 @@ if [ ! -f "$AEC/lib/libwebrtc-audio-processing-1.a" ] && \
     https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing.git "$SRC/webrtc-ap"
   (
     # Git Bash 의 /usr/bin 에 GNU link 가 있어 meson 이 MSVC link.exe 대신
-    # 그걸 집는다. 이 단계에서만 cl 이 있는 폴더를 앞에 둔다(PATH 를 통째로
-    # 늘리면 nmake 가 "out of environment space" 로 멈춘다).
+    # 그걸 집는다. 이 단계에서만 cl 이 있는 폴더를 앞에 둔다.
     export PATH="$(dirname "$(command -v cl)"):$PATH"
     cd "$SRC/webrtc-ap"
     meson setup build --buildtype=release -Ddefault_library=static \
