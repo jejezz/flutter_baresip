@@ -1,11 +1,10 @@
 @TestOn('mac-os')
 library;
 
-import 'dart:async';
 import 'dart:io';
 
 import 'package:baresip_sip/baresip_sip.dart';
-import 'package:test/test.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 /// 실제 스택을 띄워 C 경계가 도는지만 본다. 서버는 없다 — 아무도 듣지 않는
 /// 포트로 REGISTER 를 보내 실패 사건이 올라오는지 확인한다.

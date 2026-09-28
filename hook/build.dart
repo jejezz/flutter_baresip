@@ -23,7 +23,7 @@ void main(List<String> args) async {
     await CBuilder.library(
       name: 'baresip_sip',
       assetName: 'src/bindings.dart',
-      sources: ['src/baresip_sip.c'],
+      sources: ['src/baresip_sip.c', 'src/vt_h264.c', 'src/video_out.c'],
       includes: ['native/macos/include', 'native/macos/include/re'],
       // 상대 경로는 훅의 출력 폴더 기준이 되므로 패키지 경로로 푼다.
       libraryDirectories: [
@@ -46,6 +46,12 @@ void main(List<String> args) async {
         'CoreAudio',
         'CoreFoundation',
         'SystemConfiguration',
+        // 영상: 카메라(avcapture)와 H.264(vt_h264.c).
+        'AVFoundation',
+        'CoreMedia',
+        'CoreVideo',
+        'Foundation',
+        'VideoToolbox',
       ],
       // Flutter 는 훅에 macOS 13 을 넘기지만 앱(Runner)의 최소 버전은 12.0 이다.
       // 그대로 두면 macOS 12 에서 앱은 떠도 이 라이브러리를 싣지 못한다.

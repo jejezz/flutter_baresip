@@ -24,6 +24,8 @@
 #include <baresip.h>
 
 #include "baresip_sip.h"
+#include "video_out.h"
+#include "vt_h264.h"
 
 #define MAX_CALLS 8
 #define REG_INTERVAL 300
@@ -48,6 +50,11 @@ static struct {
 	struct ua *ua;
 	struct slot slots[MAX_CALLS];
 	int next_call_id;
+
+	/* 영상 크기 알림이 어느 통화의 것인지. 영상 스레드에서 읽는다. */
+	atomic_int media_call_id;
+	atomic_uint video_w[2];
+	atomic_uint video_h[2];
 } g = {
 	.lock = PTHREAD_MUTEX_INITIALIZER,
 	.cond = PTHREAD_COND_INITIALIZER,
@@ -180,6 +187,51 @@ static void emit_call(struct call *call, int id, const char *state,
 	     scode, json_str, reason ? reason : "");
 }
 
+/* 영상이 실제로 오가는지 — SDP 에 영상이 있고 방향이 inactive 가 아니다. */
+static bool video_active(const struct call *call)
+{
+	const struct sdp_media *m;
+
+	if (!call_has_video(call))
+		return false;
+
+	m = stream_sdpmedia(video_strm(call_video(call)));
+	return m && sdp_media_dir(m) != SDP_INACTIVE;
+}
+
+/* 미디어 상태. 영상 크기는 아는 쪽만 싣는다(0 이면 아직 그림이 없다). */
+static void emit_media(int id, bool video)
+{
+	unsigned lw = atomic_load(&g.video_w[0]), lh = atomic_load(&g.video_h[0]);
+	unsigned rw = atomic_load(&g.video_w[1]), rh = atomic_load(&g.video_h[1]);
+
+	emit("\"type\":\"media\",\"callId\":%d,"
+	     "\"audioActive\":true,\"videoActive\":%s,"
+	     "\"localVideoWidth\":%u,\"localVideoHeight\":%u,"
+	     "\"remoteVideoWidth\":%u,\"remoteVideoHeight\":%u",
+	     id, video ? "true" : "false", lw, lh, rw, rh);
+}
+
+/* video_out 이 영상 스레드에서 부른다. */
+static void on_video_size(int which, unsigned w, unsigned h)
+{
+	int id = atomic_load(&g.media_call_id);
+
+	atomic_store(&g.video_w[which], w);
+	atomic_store(&g.video_h[which], h);
+	if (id > 0)
+		emit_media(id, true);
+}
+
+static void reset_video_state(void)
+{
+	for (int i = 0; i < 2; i++) {
+		atomic_store(&g.video_w[i], 0);
+		atomic_store(&g.video_h[i], 0);
+	}
+	video_out_reset();
+}
+
 static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 {
 	struct call *call = bevent_get_call(event);
@@ -239,9 +291,18 @@ static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 
 	case BEVENT_CALL_ESTABLISHED:
 		id = slot_add(call);
+		reset_video_state();
+		atomic_store(&g.media_call_id, id);
 		emit_call(call, id, "confirmed", 0, NULL);
-		emit("\"type\":\"media\",\"callId\":%d,"
-		     "\"audioActive\":true,\"videoActive\":false", id);
+		emit_media(id, video_active(call));
+		break;
+
+	/* 통화 중 영상을 켜고 끈 re-INVITE 가 오가면 미디어 상태를 다시 알린다. */
+	case BEVENT_CALL_REMOTE_SDP:
+	case BEVENT_CALL_LOCAL_SDP:
+		id = slot_id(call);
+		if (id > 0 && call_state(call) == CALL_STATE_ESTABLISHED)
+			emit_media(id, video_active(call));
 		break;
 
 	case BEVENT_CALL_CLOSED:
@@ -253,6 +314,8 @@ static void event_handler(enum bevent_ev ev, struct bevent *event, void *arg)
 			code = call_scode(call);
 		emit_call(call, id, "disconnected", code, reason);
 		slot_remove(call);
+		if (atomic_load(&g.media_call_id) == id)
+			atomic_store(&g.media_call_id, 0);
 		break;
 
 	default:
@@ -274,6 +337,13 @@ static const char *config_template =
 	"audio_source\t\taudiounit,default\n"
 	"audio_alert\t\taudiounit,default\n"
 	"rtp_ports\t\t10000-20000\n"
+	/* 영상: 카메라는 avcapture, 출력은 video_out.c 의 "flutter".
+	 * H.264 는 vt_h264.c(VideoToolbox)가 맡는다. */
+	"video_source\t\tavcapture,\n"
+	"video_display\t\tflutter,\n"
+	"video_size\t\t640x480\n"
+	"video_bitrate\t\t1000000\n"
+	"video_fps\t\t25\n"
 	/* 음성에는 스테레오가 필요 없고, webrtc_aec 는 모노만 처리한다. */
 	"opus_stereo\t\tno\n"
 	"opus_sprop_stereo\tno\n"
@@ -286,6 +356,7 @@ static const char *config_template =
 	/* 에코 제거(WebRTC AEC3). 필터는 불러온 순서대로 서므로 auconv·
 	 * auresamp 뒤에 둬야 코덱 표본율에서 돈다. 모노만 받는다. */
 	"module\t\t\twebrtc_aec.so\n"
+	"module\t\t\tavcapture.so\n"
 	"module\t\t\tstun.so\n"
 	"module\t\t\tturn.so\n"
 	"module\t\t\tice.so\n"
@@ -353,6 +424,11 @@ static void *stack_thread(void *arg)
 	if (err)
 		goto out;
 
+	vt_h264_register();
+	err = video_out_register(on_video_size);
+	if (err)
+		goto out;
+
 	err = ua_init("GotDoor SIP (baresip " BARESIP_VERSION ")",
 		      true, true, true);
 	if (err)
@@ -379,6 +455,8 @@ static void *stack_thread(void *arg)
 	g.ua = NULL;
 	memset(g.slots, 0, sizeof(g.slots));
 	ua_close();
+	video_out_unregister();
+	vt_h264_unregister();
 	module_app_unload();
 	conf_close();
 	baresip_close();
@@ -475,7 +553,8 @@ int bs_register(const char *user, const char *password, const char *domain,
 			  "<sip:%s@%s;transport=%s>"
 			  ";outbound=\"sip:%s:%u;transport=%s\""
 			  ";regint=%u;auth_user=%s"
-			  ";audio_codecs=PCMU/8000/1,PCMA/8000/1,opus/48000/1",
+			  ";audio_codecs=PCMU/8000/1,PCMA/8000/1,opus/48000/1"
+			  ";video_codecs=H264",
 			  user, domain, transport,
 			  server, port, transport,
 			  REG_INTERVAL, user);
@@ -560,9 +639,25 @@ int bs_hangup(int call_id, int code)
 		 * 기다리므로 여기서 직접 알린다. */
 		emit_call(call, call_id, "disconnected", code ? code : 200, "");
 		slot_remove(call);
+		if (atomic_load(&g.media_call_id) == call_id)
+			atomic_store(&g.media_call_id, 0);
 		ua_hangup(g.ua, call, (uint16_t)code, NULL);
 		err = 0;
 	}
+	LEAVE();
+	return -err;
+}
+
+int bs_set_video(int call_id, int enabled)
+{
+	struct call *call;
+	int err = ENOENT;
+
+	ENTER();
+	call = slot_call(call_id);
+	if (call)
+		err = call_set_video_dir(call, enabled ? SDP_SENDRECV
+					 : SDP_INACTIVE);
 	LEAVE();
 	return -err;
 }
@@ -607,7 +702,8 @@ char *bs_stats(int call_id)
 	struct stream *strm;
 	const struct aucodec *ac;
 	const struct rtcp_stats *rtcp;
-	const struct sdp_media *m;
+	const struct sdp_media *m, *vm = NULL;
+	const struct vidcodec *vc = NULL;
 	char *body = NULL, *out = NULL;
 	double loss = 0;
 
@@ -623,6 +719,10 @@ char *bs_stats(int call_id)
 		goto out;
 
 	ac = audio_codec(au, true);
+	if (video_active(call)) {
+		vc = video_codec(call_video(call), true);
+		vm = stream_sdpmedia(video_strm(call_video(call)));
+	}
 	rtcp = stream_rtcp_stats(strm);
 	m = stream_sdpmedia(strm);
 
@@ -635,7 +735,8 @@ char *bs_stats(int call_id)
 		"\"bytesSent\":%u,\"packetsSent\":%u,"
 		"\"bytesReceived\":%u,\"packetsReceived\":%u,"
 		"\"lossPercent\":%.1f,\"rttMs\":%u,"
-		"\"remoteRtpAddress\":\"%J\",\"audioDirection\":\"%s\"}",
+		"\"remoteRtpAddress\":\"%J\",\"audioDirection\":\"%s\","
+		"\"videoCodec\":%H,\"videoDirection\":\"%s\"}",
 		json_str, ac ? ac->name : "",
 		stream_metric_get_tx_n_bytes(strm),
 		stream_metric_get_tx_n_packets(strm),
@@ -644,7 +745,9 @@ char *bs_stats(int call_id)
 		loss,
 		rtcp ? rtcp->rtt / 1000 : 0,
 		sdp_media_raddr(m),
-		sdp_dir_name(sdp_media_dir(m)));
+		sdp_dir_name(sdp_media_dir(m)),
+		json_str, vc ? vc->name : "",
+		vm ? sdp_dir_name(sdp_media_dir(vm)) : "");
 
  out:
 	re_thread_leave();

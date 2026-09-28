@@ -31,6 +31,16 @@ int  bs_hangup(int call_id, int code);
 int  bs_mute(int call_id, int mute);
 int  bs_dtmf(int call_id, const char *digits);
 
+/* 통화 중 영상을 켜고 끈다(re-INVITE). */
+int  bs_set_video(int call_id, int enabled);
+
+/* 영상 프레임을 받을 곳. which: 0 = 내 카메라, 1 = 상대. bgra 는 한 줄에
+ * stride 바이트인 BGRA 그림이고 이 호출 안에서만 유효하다. baresip 의 영상
+ * 스레드에서 불린다. */
+typedef void (*bs_video_sink)(void *ctx, int which, const uint8_t *bgra,
+			      int width, int height, int stride);
+void bs_set_video_sink(bs_video_sink sink, void *ctx);
+
 /* 통화 진단 값(JSON). 통화가 없으면 NULL. */
 char *bs_stats(int call_id);
 

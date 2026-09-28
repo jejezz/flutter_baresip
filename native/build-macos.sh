@@ -36,8 +36,9 @@ OPUS="$SRC/opus-prefix"
 WEBRTC_AP_VERSION=v1.3
 AEC="$SRC/aec-prefix"
 
-# 음성 통화에 필요한 것만. 영상 모듈은 다음 단계에서 붙인다.
-MODULES="g711;opus;audiounit;auconv;auresamp;webrtc_aec;stun;turn;ice;srtp;dtls_srtp"
+# H.264 코덱(VideoToolbox)과 영상 출력은 baresip 모듈이 아니라 우리 C 경계
+# (src/)에 있다. 카메라는 baresip 의 avcapture(AVFoundation)를 쓴다.
+MODULES="g711;opus;audiounit;auconv;auresamp;webrtc_aec;avcapture;stun;turn;ice;srtp;dtls_srtp"
 
 log() { printf '\n=== %s\n' "$*"; }
 
@@ -51,6 +52,12 @@ fetch() {
 mkdir -p "$SRC"
 fetch re
 fetch baresip
+
+# baresip 에 얹는 작은 고침(patches/). 매번 원본으로 되돌린 뒤 다시 얹는다.
+git -C "$SRC/baresip" checkout -q -- .
+for p in "$HERE"/patches/baresip-*.patch; do
+  git -C "$SRC/baresip" apply "$p"
+done
 if [ ! -d "$SRC/webrtc-ap" ]; then
   git clone -q --depth 1 -b "$WEBRTC_AP_VERSION" \
     https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing.git "$SRC/webrtc-ap"

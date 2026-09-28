@@ -7,6 +7,8 @@ environment:
   sdk: ^3.10.0
 
 dependencies:
+  flutter:
+    sdk: flutter
   code_assets: ^2.1.0
   ffi: ^2.1.0
   hooks: ^2.2.0
@@ -14,5 +16,14 @@ dependencies:
   native_toolchain_c: ^0.19.5
 
 dev_dependencies:
+  flutter_test:
+    sdk: flutter
   lints: ^6.0.0
-  test: ^1.25.0
+
+# SIP 스택은 dart:ffi(hook/build.dart)로 싣는다. macOS 플러그인은 영상 텍스처를
+# 등록하는 일만 한다(macos/baresip_sip).
+flutter:
+  plugin:
+    platforms:
+      macos:
+        pluginClass: BaresipSipPlugin

@@ -2,3 +2,4 @@
 pubspec.lock
 # build-macos.sh 가 받아 오는 소스와 빌드 찌꺼기. 결과물(native/macos)은 넣는다.
 native/third_party/
+build/

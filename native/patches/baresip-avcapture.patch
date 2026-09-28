@@ -1,0 +1,56 @@
+diff --git a/modules/avcapture/avcapture.m b/modules/avcapture/avcapture.m
+index fd57cef..50a184a 100644
+--- a/modules/avcapture/avcapture.m
++++ b/modules/avcapture/avcapture.m
+@@ -231,15 +231,49 @@ - (id)init:(struct vidsrc_st *)st
+ 
+ 	output.alwaysDiscardsLateVideoFrames = YES;
+ 
++	/* 형식을 정하지 않으면 카메라 고유 형식(예: 'yuvs')으로 와서
++	 * vidframe_set_pixbuf 가 모르는 채 버린다. NV12 로 받는다. */
++	output.videoSettings = @{
++		(id)kCVPixelBufferPixelFormatTypeKey:
++			@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
++	};
++
+ 	queue = dispatch_queue_create("avcapture", NULL);
+ 	[output setSampleBufferDelegate:self queue:queue];
+ 	dispatch_release(queue);
+ 
++	[sess addInput:screenInput ? screenInput : input];
++	[sess addOutput:output];
++
++	/* 해상도는 입력을 붙인 뒤에 정해야 먹는다. 앞에서 정하면 장치가 없어
++	 * 무시되고 카메라 기본(예: 1920x1080)으로 나온다. */
+ 	if (dev)
+ 		sess.sessionPreset = [self map_preset:dev sz:sz];
+ 
+-	[sess addInput:screenInput ? screenInput : input];
+-	[sess addOutput:output];
++	/* 그래도 카메라가 기본 해상도로 내는 경우가 있다(MacBook 카메라).
++	 * 출력에 크기를 정해 AVFoundation 이 줄여 주게 한다. 폭은 요청대로,
++	 * 높이는 카메라의 화면비를 따라 찌그러지지 않게 한다. */
++	if (dev && sz->w) {
++		CMVideoDimensions d = CMVideoFormatDescriptionGetDimensions(
++			dev.activeFormat.formatDescription);
++		unsigned w = sz->w;
++		unsigned h = d.width > 0 ? (w * d.height / d.width) & ~1u
++					 : sz->h;
++
++		if (d.width > 0 && (unsigned)d.width < w) {
++			w = d.width;
++			h = d.height;
++		}
++
++		output.videoSettings = @{
++			(id)kCVPixelBufferPixelFormatTypeKey:
++				@(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
++			(id)kCVPixelBufferWidthKey: @(w),
++			(id)kCVPixelBufferHeightKey: @(h),
++		};
++		info("avcapture: camera %dx%d, output %ux%u\n",
++		     d.width, d.height, w, h);
++	}
+ 
+ 	[self start:nil];
+ 

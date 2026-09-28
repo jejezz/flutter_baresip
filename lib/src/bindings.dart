@@ -47,3 +47,9 @@ external Pointer<Utf8> bs_stats(int callId);
 
 @Native<Void Function(Pointer<Void>)>()
 external void bs_free(Pointer<Void> p);
+
+@Native<Int32 Function(Int32, Int32)>()
+external int bs_set_video(int callId, int enabled);
+
+@Native<Void Function(Pointer<Void>, Pointer<Void>)>()
+external void bs_set_video_sink(Pointer<Void> sink, Pointer<Void> ctx);

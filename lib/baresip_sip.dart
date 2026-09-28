@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/services.dart';
 
 import 'src/bindings.dart' as c;
 
@@ -17,6 +18,17 @@ class BaresipException implements Exception {
   String toString() => 'BaresipException($operation, errno $code)';
 }
 
+/// 영상 프레임이 올라가는 Flutter 텍스처 두 개.
+class BaresipVideoTextures {
+  const BaresipVideoTextures({required this.local, required this.remote});
+
+  /// 내 카메라.
+  final int local;
+
+  /// 상대 영상.
+  final int remote;
+}
+
 /// baresip 을 부르는 얇은 껍데기.
 ///
 /// 사건의 모양(`type` 으로 갈래를 나눈 맵)은 kamailio_sip 플러그인과 같다.
@@ -24,6 +36,8 @@ class BaresipException implements Exception {
 ///
 /// 스택은 프로세스에 하나뿐이다.
 class BaresipSip {
+  static const MethodChannel _video = MethodChannel('baresip_sip/video');
+
   final StreamController<Map<String, Object?>> _events = StreamController.broadcast();
   NativeCallable<c.EventCallback>? _callback;
 
@@ -42,6 +56,47 @@ class BaresipSip {
       throw BaresipException('start', -err);
     }
     _callback = callback;
+  }
+
+  /// 영상 텍스처를 만들고 스택의 영상 출력을 거기로 잇는다.
+  ///
+  /// 텍스처를 등록하는 플랫폼 플러그인이 없으면(macOS 밖, 테스트) null.
+  Future<BaresipVideoTextures?> attachVideo() async {
+    final Map<Object?, Object?>? reply;
+    try {
+      reply = await _video.invokeMapMethod<Object?, Object?>('attach');
+    } on MissingPluginException {
+      return null;
+    }
+    if (reply == null) return null;
+    c.bs_set_video_sink(
+      Pointer.fromAddress(reply['sink']! as int),
+      Pointer.fromAddress(reply['context']! as int),
+    );
+    return BaresipVideoTextures(
+      local: reply['localTextureId']! as int,
+      remote: reply['remoteTextureId']! as int,
+    );
+  }
+
+  /// 카메라 권한. 아직 묻지 않았으면 이때 묻는다.
+  ///
+  /// `authorized` · `denied` · `restricted` · `unknown`. 플러그인이 없으면 null.
+  Future<String?> requestCameraAccess() async {
+    try {
+      return await _video.invokeMethod<String>('cameraAccess');
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// 지난 통화의 마지막 그림을 텍스처에서 지운다.
+  Future<void> clearVideo() async {
+    try {
+      await _video.invokeMethod<void>('clear');
+    } on MissingPluginException {
+      // 텍스처가 없으면 지울 것도 없다.
+    }
   }
 
   void stop() {
@@ -92,6 +147,10 @@ class BaresipSip {
   void decline(int callId, {int code = 603}) => _check('decline', c.bs_hangup(callId, code));
 
   void hangup(int callId) => _check('hangup', c.bs_hangup(callId, 0));
+
+  /// 통화 중 영상을 켜고 끈다(re-INVITE).
+  void setVideoEnabled(int callId, bool enabled) =>
+      _check('setVideoEnabled', c.bs_set_video(callId, enabled ? 1 : 0));
 
   void setMute(int callId, bool mute) => _check('setMute', c.bs_mute(callId, mute ? 1 : 0));
 
