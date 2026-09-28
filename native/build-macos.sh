@@ -95,6 +95,8 @@ if [ ! -f "$OPENSSL/lib/libcrypto.a" ]; then
     make -j"$(sysctl -n hw.ncpu)" build_libs > "$SRC/openssl-build.log"
     make install_dev > "$SRC/openssl-install.log"
   )
+  # CI 캐시는 결과 폴더만 되살리므로 라이선스도 거기에 둔다.
+  cp "$SRC/openssl-$OPENSSL_VERSION/LICENSE.txt" "$OPENSSL/LICENSE"
 fi
 
 log "Opus $OPUS_VERSION"
@@ -109,20 +111,25 @@ if [ ! -f "$OPUS/lib/libopus.a" ]; then
     -DBUILD_SHARED_LIBS=OFF -DOPUS_BUILD_TESTING=OFF -DOPUS_BUILD_PROGRAMS=OFF \
     -DCMAKE_INSTALL_PREFIX="$OPUS" > "$SRC/opus-build.log"
   cmake --build "$SRC/opus/build" -j --target install >> "$SRC/opus-build.log"
+  cp "$SRC/opus/COPYING" "$OPUS/LICENSE"
 fi
 
 log "webrtc-audio-processing"
 # abseil 까지 정적으로 묶여 libwebrtc-audio-processing-1.a 하나로 나온다.
-(
-  export PATH="$SRC/.venv/bin:$PATH" MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS"
-  cd "$SRC/webrtc-ap"
-  [ -d build ] || meson setup build --buildtype=release \
-    -Ddefault_library=static --force-fallback-for=abseil-cpp \
-    -Dprefix="$AEC" \
-    -Dc_args="-mmacosx-version-min=$MIN_MACOS" \
-    -Dcpp_args="-mmacosx-version-min=$MIN_MACOS"
-  meson install -C build >/dev/null
-)
+if [ ! -f "$AEC/lib/libwebrtc-audio-processing-1.a" ]; then
+  (
+    export PATH="$SRC/.venv/bin:$PATH" MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS"
+    cd "$SRC/webrtc-ap"
+    [ -d build ] || meson setup build --buildtype=release \
+      -Ddefault_library=static --force-fallback-for=abseil-cpp \
+      -Dprefix="$AEC" \
+      -Dc_args="-mmacosx-version-min=$MIN_MACOS" \
+      -Dcpp_args="-mmacosx-version-min=$MIN_MACOS"
+    meson install -C build >/dev/null
+  )
+  cp "$SRC/webrtc-ap/COPYING" "$AEC/LICENSE"
+  cp "$SRC"/webrtc-ap/subprojects/abseil-cpp-*/LICENSE "$AEC/LICENSE.abseil"
+fi
 
 log "libre"
 cmake -S "$SRC/re" -B "$SRC/re/build" "${COMMON[@]}" \
@@ -153,11 +160,11 @@ cp -R "$SRC/re/include" "$OUT/include/re"
 cp "$SRC/baresip/include/baresip.h" "$OUT/include/"
 cp "$SRC/re/LICENSE" "$OUT/LICENSE.libre"
 cp "$SRC/baresip/LICENSE" "$OUT/LICENSE.baresip"
-cp "$SRC/webrtc-ap/COPYING" "$OUT/LICENSE.webrtc-audio-processing"
+cp "$AEC/LICENSE" "$OUT/LICENSE.webrtc-audio-processing"
 # webrtc-audio-processing 안에 abseil 이 정적으로 들어간다.
-cp "$SRC"/webrtc-ap/subprojects/abseil-cpp-*/LICENSE "$OUT/LICENSE.abseil"
-cp "$SRC/openssl-$OPENSSL_VERSION/LICENSE.txt" "$OUT/LICENSE.openssl"
-cp "$SRC/opus/COPYING" "$OUT/LICENSE.opus"
+cp "$AEC/LICENSE.abseil" "$OUT/LICENSE.abseil"
+cp "$OPENSSL/LICENSE" "$OUT/LICENSE.openssl"
+cp "$OPUS/LICENSE" "$OUT/LICENSE.opus"
 
 # 모든 .a 가 MIN_MACOS 로 빌드됐는지 확인한다.
 bad=$(for a in "$OUT"/lib/*.a; do

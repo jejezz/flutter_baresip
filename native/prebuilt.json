@@ -1,0 +1,8 @@
+{
+  "repository": "jejezz/flutter_baresip",
+  "tag": "TBD",
+  "assets": {
+    "macos": { "name": "baresip-macos-arm64.zip", "sha256": "TBD" },
+    "windows": { "name": "baresip-windows-x64.zip", "sha256": "TBD" }
+  }
+}
