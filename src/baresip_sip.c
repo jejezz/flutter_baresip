@@ -274,12 +274,18 @@ static const char *config_template =
 	"audio_source\t\taudiounit,default\n"
 	"audio_alert\t\taudiounit,default\n"
 	"rtp_ports\t\t10000-20000\n"
+	/* 음성에는 스테레오가 필요 없고, webrtc_aec 는 모노만 처리한다. */
+	"opus_stereo\t\tno\n"
+	"opus_sprop_stereo\tno\n"
 	"module_path\t\t.\n"
 	"module\t\t\tg711.so\n"
 	"module\t\t\topus.so\n"
 	"module\t\t\taudiounit.so\n"
 	"module\t\t\tauconv.so\n"
 	"module\t\t\tauresamp.so\n"
+	/* 에코 제거(WebRTC AEC3). 필터는 불러온 순서대로 서므로 auconv·
+	 * auresamp 뒤에 둬야 코덱 표본율에서 돈다. 모노만 받는다. */
+	"module\t\t\twebrtc_aec.so\n"
 	"module\t\t\tstun.so\n"
 	"module\t\t\tturn.so\n"
 	"module\t\t\tice.so\n"
@@ -462,12 +468,14 @@ int bs_register(const char *user, const char *password, const char *domain,
 	}
 
 	/* 도메인과 서버가 다를 수 있으므로 요청은 늘 서버로 보낸다(outbound).
-	 * 비밀번호는 문자열 파싱을 거치지 않게 따로 넣는다. */
+	 * 비밀번호는 문자열 파싱을 거치지 않게 따로 넣는다.
+	 * opus 는 모노로 설정해 두었으므로 채널 수를 1 로 찾는다(SDP 에는
+	 * RFC 7587 대로 opus/48000/2 가 나간다). */
 	err = re_sdprintf(&aor,
 			  "<sip:%s@%s;transport=%s>"
 			  ";outbound=\"sip:%s:%u;transport=%s\""
 			  ";regint=%u;auth_user=%s"
-			  ";audio_codecs=PCMU/8000/1,PCMA/8000/1,opus/48000/2",
+			  ";audio_codecs=PCMU/8000/1,PCMA/8000/1,opus/48000/1",
 			  user, domain, transport,
 			  server, port, transport,
 			  REG_INTERVAL, user);

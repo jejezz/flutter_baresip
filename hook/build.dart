@@ -23,7 +23,18 @@ void main(List<String> args) async {
       includes: ['native/macos/include', 'native/macos/include/re'],
       // 상대 경로는 훅의 출력 폴더 기준이 되므로 패키지 경로로 푼다.
       libraryDirectories: [input.packageRoot.resolve('native/macos/lib/').toFilePath()],
-      libraries: ['baresip', 're', 'opus', 'ssl', 'crypto', 'z', 'resolv'],
+      libraries: [
+        'baresip',
+        're',
+        'webrtc-audio-processing',
+        'opus',
+        'ssl',
+        'crypto',
+        'z',
+        'resolv',
+        // webrtc-audio-processing 은 C++ 이다.
+        'c++',
+      ],
       frameworks: ['AudioToolbox', 'CoreAudio', 'CoreFoundation', 'SystemConfiguration'],
       // libre 를 빌드할 때 쓴 값과 같아야 헤더의 구조체 배치가 맞는다.
       defines: {
