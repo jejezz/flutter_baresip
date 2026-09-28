@@ -38,6 +38,19 @@ class BaresipVideoTextures {
 class BaresipSip {
   static const MethodChannel _video = MethodChannel('baresip_sip/video');
 
+  /// 이 빌드에 스택 라이브러리가 들어 있는지.
+  ///
+  /// 미리 빌드한 라이브러리가 없는 플랫폼·체크아웃에서는 빌드 훅이 아무것도
+  /// 내지 않고, 네이티브 함수를 처음 부를 때 ArgumentError 가 난다.
+  static bool get isAvailable {
+    try {
+      c.bs_free(nullptr);
+      return true;
+    } on ArgumentError {
+      return false;
+    }
+  }
+
   final StreamController<Map<String, Object?>> _events = StreamController.broadcast();
   NativeCallable<c.EventCallback>? _callback;
 

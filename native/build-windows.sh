@@ -37,6 +37,10 @@ MODULES="g711;opus;wasapi;auconv;auresamp;webrtc_aec;stun;turn;ice;srtp;dtls_srt
 # OpenSSL 의 Configure 는 MSYS perl 이 아니라 Strawberry Perl 이어야 한다.
 PERL="${PERL:-/c/Strawberry/perl/bin/perl.exe}"
 
+# Git Bash 의 /usr/bin 에 GNU link 가 있어 meson 이 MSVC link.exe 대신 그걸
+# 집는다. cl 이 있는 MSVC 도구 폴더를 PATH 맨 앞에 둔다.
+export PATH="$(dirname "$(command -v cl)"):$PATH"
+
 log() { printf '\n=== %s\n' "$*"; }
 win() { cygpath -m "$1"; }
 
@@ -74,6 +78,7 @@ if [ ! -f "$OPUS/lib/opus.lib" ]; then
     -DBUILD_SHARED_LIBS=OFF -DOPUS_BUILD_TESTING=OFF -DOPUS_BUILD_PROGRAMS=OFF \
     -DCMAKE_INSTALL_PREFIX="$(win "$OPUS")"
   cmake --build "$SRC/opus/build" --target install
+  cp "$SRC/opus/COPYING" "$OPUS/LICENSE"
 fi
 
 log "OpenSSL $OPENSSL_VERSION"
@@ -92,6 +97,7 @@ if [ ! -f "$OPENSSL/lib/libcrypto.lib" ]; then
     nmake build_libs
     nmake install_dev
   )
+  cp "$SRC/openssl-$OPENSSL_VERSION/LICENSE.txt" "$OPENSSL/LICENSE"
 fi
 
 log "webrtc-audio-processing $WEBRTC_AP_VERSION"
@@ -106,6 +112,9 @@ if [ ! -f "$AEC/lib/libwebrtc-audio-processing-1.a" ] && \
       --prefix="$(win "$AEC")"
     meson install -C build
   )
+  # CI 캐시는 결과 폴더만 되살리므로 라이선스도 거기에 둔다.
+  cp "$SRC/webrtc-ap/COPYING" "$AEC/LICENSE"
+  cp "$SRC"/webrtc-ap/subprojects/abseil-cpp-*/LICENSE "$AEC/LICENSE.abseil"
 fi
 AEC_LIB="$(ls "$AEC"/lib/*webrtc-audio-processing-1.* | head -1)"
 
@@ -159,10 +168,10 @@ PY
 
 cp "$SRC/re/LICENSE" "$OUT/LICENSE.libre"
 cp "$SRC/baresip/LICENSE" "$OUT/LICENSE.baresip"
-cp "$SRC/webrtc-ap/COPYING" "$OUT/LICENSE.webrtc-audio-processing"
-cp "$SRC"/webrtc-ap/subprojects/abseil-cpp-*/LICENSE "$OUT/LICENSE.abseil"
-cp "$SRC/openssl-$OPENSSL_VERSION/LICENSE.txt" "$OUT/LICENSE.openssl"
-cp "$SRC/opus/COPYING" "$OUT/LICENSE.opus"
+cp "$AEC/LICENSE" "$OUT/LICENSE.webrtc-audio-processing"
+cp "$AEC/LICENSE.abseil" "$OUT/LICENSE.abseil"
+cp "$OPENSSL/LICENSE" "$OUT/LICENSE.openssl"
+cp "$OPUS/LICENSE" "$OUT/LICENSE.opus"
 
 ls -l "$OUT/lib"
 cat "$OUT/defines.txt"
