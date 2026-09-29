@@ -9,6 +9,15 @@
 
 #include <stdint.h>
 
+/* Dart(@Native)가 이름으로 찾는 함수. MSVC 는 dllexport 를 붙인 것만 DLL 밖으로
+ * 내보낸다. 없으면 DLL 은 실려도 함수를 찾지 못해 BaresipSip.isAvailable 이
+ * false 가 된다. */
+#ifdef _WIN32
+#define BS_API __declspec(dllexport)
+#else
+#define BS_API __attribute__((visibility("default")))
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,40 +26,41 @@ extern "C" {
 typedef void (*bs_event_cb)(char *json);
 
 /* 스택을 띄우고 이벤트 루프가 돌 때까지 기다린다. */
-int  bs_start(uint16_t sip_port, bs_event_cb cb);
-void bs_stop(void);
+BS_API int  bs_start(uint16_t sip_port, bs_event_cb cb);
+BS_API void bs_stop(void);
 
-int  bs_register(const char *user, const char *password, const char *domain,
-		 const char *server, uint16_t port, const char *transport);
-int  bs_unregister(void);
+BS_API int  bs_register(const char *user, const char *password,
+			const char *domain, const char *server, uint16_t port,
+			const char *transport);
+BS_API int  bs_unregister(void);
 
 /* 성공하면 통화 번호(양수)를 돌려준다. */
-int  bs_call(const char *uri, int video);
-int  bs_answer(int call_id, int video);
-int  bs_hangup(int call_id, int code);
-int  bs_mute(int call_id, int mute);
-int  bs_dtmf(int call_id, const char *digits);
+BS_API int  bs_call(const char *uri, int video);
+BS_API int  bs_answer(int call_id, int video);
+BS_API int  bs_hangup(int call_id, int code);
+BS_API int  bs_mute(int call_id, int mute);
+BS_API int  bs_dtmf(int call_id, const char *digits);
 
 /* 통화 중 영상을 켜고 끈다(re-INVITE). */
-int  bs_set_video(int call_id, int enabled);
+BS_API int  bs_set_video(int call_id, int enabled);
 
 /* 영상 프레임을 받을 곳. which: 0 = 내 카메라, 1 = 상대. bgra 는 한 줄에
  * stride 바이트인 BGRA 그림이고 이 호출 안에서만 유효하다. baresip 의 영상
  * 스레드에서 불린다. */
 typedef void (*bs_video_sink)(void *ctx, int which, const uint8_t *bgra,
 			      int width, int height, int stride);
-void bs_set_video_sink(bs_video_sink sink, void *ctx);
+BS_API void bs_set_video_sink(bs_video_sink sink, void *ctx);
 
 /* 통화 진단 값(JSON). 통화가 없으면 NULL. */
-char *bs_stats(int call_id);
+BS_API char *bs_stats(int call_id);
 
-void bs_free(void *p);
+BS_API void bs_free(void *p);
 
 /* 로그를 이 파일(UTF-8 경로)에 덧붙인다. baresip·libre 로그와 bs_log 로 넘긴
  * 줄이 시각과 함께 쌓인다. NULL 이나 빈 문자열이면 멈춘다. bs_start 앞에
  * 불러야 기동 로그까지 남는다. */
-int  bs_set_log_file(const char *path);
-void bs_log(const char *msg);
+BS_API int  bs_set_log_file(const char *path);
+BS_API void bs_log(const char *msg);
 
 #ifdef __cplusplus
 }

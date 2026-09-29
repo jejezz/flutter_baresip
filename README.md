@@ -15,7 +15,7 @@ dependencies:
   flutter_baresip:
     git:
       url: https://github.com/jejezz/flutter_baresip
-      ref: v0.1.1
+      ref: v0.1.2
 ```
 
 ```dart
