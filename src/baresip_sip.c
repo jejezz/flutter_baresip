@@ -618,6 +618,50 @@ int bs_unregister(void)
 	return 0;
 }
 
+/* Direct 모드. REGISTER 없이 sip:<user>@<local_ip> 계정만 올린다. 상대가 이
+ * 주소로 곧바로 보내는 INVITE 를 이 계정이 받고, 발신도 이 계정으로 나간다.
+ * regint=0 이고 ua_register 를 부르지 않는다. */
+int bs_direct_start(const char *user, const char *local_ip)
+{
+	char *aor = NULL;
+	int err;
+
+	ENTER();
+
+	if (g.ua) {
+		ua_destroy(g.ua);
+		g.ua = NULL;
+		memset(g.slots, 0, sizeof(g.slots));
+	}
+
+	err = re_sdprintf(&aor,
+			  "<sip:%s@%s>;regint=0"
+			  ";audio_codecs=PCMU/8000/1,PCMA/8000/1,opus/48000/1"
+			  VIDEO_CODECS,
+			  user, local_ip);
+	if (err)
+		goto out;
+
+	err = ua_alloc(&g.ua, aor);
+
+ out:
+	mem_deref(aor);
+	LEAVE();
+	return -err;
+}
+
+int bs_direct_stop(void)
+{
+	ENTER();
+	if (g.ua) {
+		ua_destroy(g.ua);
+		g.ua = NULL;
+		memset(g.slots, 0, sizeof(g.slots));
+	}
+	LEAVE();
+	return 0;
+}
+
 int bs_call(const char *uri, int video)
 {
 	struct call *call = NULL;

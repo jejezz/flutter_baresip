@@ -24,6 +24,10 @@ int  bs_register(const char *user, const char *password, const char *domain,
 		 const char *server, uint16_t port, const char *transport);
 int  bs_unregister(void);
 
+/* REGISTER 없는 계정(Direct). bs_direct_stop 은 계정을 없앤다. */
+int  bs_direct_start(const char *user, const char *local_ip);
+int  bs_direct_stop(void);
+
 /* 성공하면 통화 번호(양수)를 돌려준다. */
 int  bs_call(const char *uri, int video);
 int  bs_answer(int call_id, int video);
