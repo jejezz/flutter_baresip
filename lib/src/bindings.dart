@@ -34,6 +34,12 @@ external int bs_register(
 @Native<Int32 Function()>()
 external int bs_unregister();
 
+@Native<Int32 Function(Pointer<Utf8>, Pointer<Utf8>)>()
+external int bs_direct_start(Pointer<Utf8> user, Pointer<Utf8> localIp);
+
+@Native<Int32 Function()>()
+external int bs_direct_stop();
+
 @Native<Int32 Function(Pointer<Utf8>, Int32)>()
 external int bs_call(Pointer<Utf8> uri, int video);
 

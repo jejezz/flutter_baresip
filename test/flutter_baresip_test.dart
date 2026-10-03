@@ -45,4 +45,47 @@ void main() {
     await sub.cancel();
     silent.close();
   });
+
+  test('Direct 계정은 REGISTER 없이 발신할 수 있고 정지하면 없어진다', () async {
+    // baresip 은 루프백을 로컬 주소로 받아 주지 않는다. 실제 LAN 주소가 필요하다.
+    final lan = [
+      for (final i in await NetworkInterface.list(type: InternetAddressType.IPv4))
+        for (final a in i.addresses)
+          if (!a.isLoopback && !a.address.startsWith('169.254.')) a.address,
+    ];
+    if (lan.isEmpty) {
+      markTestSkipped('LAN 주소가 없다');
+      return;
+    }
+    final ip = lan.first;
+    final sip = BaresipSip();
+    final events = <Map<String, Object?>>[];
+    final sub = sip.events.listen(events.add);
+
+    sip.start(localPort: 0);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    // 계정이 없으면 발신이 ENOENT 로 막힌다.
+    expect(
+      () => sip.makeCall('sip:1002@$ip:9', video: false),
+      throwsA(isA<BaresipException>()),
+    );
+
+    sip.directStart(username: '1001', localIp: ip);
+    final id = sip.makeCall('sip:1002@$ip:9', video: false);
+    expect(id, greaterThan(0));
+    sip.hangup(id);
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(events.where((e) => e['type'] == 'registration'), isEmpty);
+
+    sip.directStop();
+    expect(
+      () => sip.makeCall('sip:1002@$ip:9', video: false),
+      throwsA(isA<BaresipException>()),
+    );
+
+    sip.stop();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await sub.cancel();
+  });
 }

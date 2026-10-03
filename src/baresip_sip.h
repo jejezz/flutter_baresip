@@ -34,6 +34,10 @@ BS_API int  bs_register(const char *user, const char *password,
 			const char *transport);
 BS_API int  bs_unregister(void);
 
+/* REGISTER 없는 계정(Direct). bs_direct_stop 은 계정을 없앤다. */
+int  bs_direct_start(const char *user, const char *local_ip);
+int  bs_direct_stop(void);
+
 /* 성공하면 통화 번호(양수)를 돌려준다. */
 BS_API int  bs_call(const char *uri, int video);
 BS_API int  bs_answer(int call_id, int video);

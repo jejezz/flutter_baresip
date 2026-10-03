@@ -160,6 +160,23 @@ class BaresipSip {
 
   void unregister() => _check('unregister', c.bs_unregister());
 
+  /// 서버에 등록하지 않는 계정(Direct)을 올린다. `sip:<username>@<localIp>` 로
+  /// 오는 INVITE 를 받고, 발신도 이 계정으로 나간다. 이전 계정은 걷어 낸다.
+  void directStart({required String username, required String localIp}) {
+    _check(
+      'directStart',
+      using(
+        (arena) => c.bs_direct_start(
+          username.toNativeUtf8(allocator: arena),
+          localIp.toNativeUtf8(allocator: arena),
+        ),
+      ),
+    );
+  }
+
+  /// Direct 계정을 없앤다.
+  void directStop() => _check('directStop', c.bs_direct_stop());
+
   /// 발신. 통화 번호를 돌려준다.
   int makeCall(String requestUri, {required bool video}) {
     final result = using(
